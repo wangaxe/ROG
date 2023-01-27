@@ -78,7 +78,8 @@ def plan_experiment(task, batch, patience, fold, rank):
         'patience': patience,  # Make it dependent on the data?
         'seed': 12345,
         'output_folder': os.path.join('Results', task),
-        'root': os.path.join('/media/SSD0/ladaza/Data/Decathlon_new_preprocessing', task),
+        # 'root': os.path.join('/media/SSD0/ladaza/Data/Decathlon_new_preprocessing', task),
+        'root': os.path.join('/datasets/MSD_data/processed/', task),
         'train_file': os.path.join('Tasks', task, f'train_fold{fold}.csv'),
         'val_file': os.path.join('Tasks', task, f'val_fold{fold}.csv'),
         'test_file': os.path.join('Tasks', task, f'val_fold{fold}.csv')

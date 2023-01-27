@@ -38,12 +38,16 @@ class tversky_loss(nn.Module):
         # inputs.shape[1]: predicted categories
         targets = one_hot(targets, inputs.shape[1])
         inputs = F.softmax(inputs, dim=1)
+        # print(targets.shape)
+        # print(inputs.shape)
 
         dims = tuple(range(2, targets.ndimension()))
         tps = torch.sum(inputs * targets, dims)
+        # print(tps.shape)
         fps = torch.sum(inputs * (1 - targets), dims) * self.alpha
         fns = torch.sum((1 - inputs) * targets, dims) * self.beta
         loss = (2 * tps) / (2 * tps + fps + fns + self.eps)
+        # print(loss.shape)
         loss = torch.mean(loss, dim=0)
         return 1 - (loss[1:]).mean()
 

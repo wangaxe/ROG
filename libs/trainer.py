@@ -71,6 +71,72 @@ def train(args, info, model, loader, noise_data, optimizer, criterion, scaler,
         print('--- Train: \tLoss: {:.6f} ---'.format(epoch_loss.avg))
     return epoch_loss.avg, noise_data
 
+def pgd_train(args, info, model, loader, noise_data, optimizer, criterion, scaler,
+          rank):
+    model.train()
+    loader.dataset.change_epoch()
+    epoch_loss = utils.AverageMeter()
+    batch_loss = utils.AverageMeter()
+
+    iterations = args.adv_iters if args.AT else 1
+    print_freq = max(1, len(loader) // 2)
+    eps = args.eps / 255.
+    for batch_idx, sample in enumerate(loader):
+        data = sample['data'].float().to(rank)
+
+        # Rescale the eps! (important for Free AT)
+        b_min = torch.amin(data, [2, 3, 4], keepdim=True)
+        b_max = torch.amax(data, [2, 3, 4], keepdim=True)
+        b_eps = (b_max - b_min) * eps
+
+        target = sample['target'].squeeze_(1).long().to(rank)
+        if args.AT:
+            for _ in range(iterations):
+                delta = noise_data[0:data.size(0)].to(rank)
+                delta.requires_grad = True
+                in_data = torch.clamp(data + delta, b_min, b_max)
+
+                with amp.autocast():
+                    out = model(in_data)
+                    loss = criterion(out, target)
+
+                scaler.scale(loss).backward()
+
+                # Update the adversarial noise
+                grad = delta.grad.detach()
+                noise_data[0:data.size(0)] += (
+                    (b_eps // 2) * torch.sign(grad)).data
+                noise_data[0:data.size(0)] = torch.clamp(
+                    noise_data[0:data.size(0)], -b_eps, b_eps)
+
+            in_data = torch.clamp(data + delta, b_min, b_max)
+        else:
+            in_data = data
+
+        optimizer.zero_grad()
+
+        with amp.autocast():
+            out = model(in_data)
+            loss = criterion(out, target)
+
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+
+        batch_loss.update(loss.item())
+        epoch_loss.update(loss.item())
+
+        if batch_loss.count % print_freq == 0:
+            if rank == 0:
+                text = '{} -- [{}/{} ({:.0f}%)]\tLoss: {:.6f}'
+                print(text.format(
+                    time.strftime("%H:%M:%S"), (batch_idx + 1),
+                    (len(loader)), 100. * (batch_idx + 1) / (len(loader)),
+                    batch_loss.avg))
+            batch_loss.reset()
+    if rank == 0:
+        print('--- Train: \tLoss: {:.6f} ---'.format(epoch_loss.avg))
+    return epoch_loss.avg, noise_data
 
 def val(args, model, loader, criterion, metrics, rank):
     model.eval()

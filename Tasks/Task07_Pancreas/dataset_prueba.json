@@ -1,0 +1,27 @@
+{
+    "mean_size": [
+        511.0,
+        511.0,
+        96.0
+    ],
+    "small_size": [
+        34.0,
+        31.0,
+        10.0
+    ],
+    "volume_small": 7997.0,
+    "big_size": [
+        158.0,
+        90.0,
+        33.0
+    ],
+    "volume_big": 50775.0,
+    "modality": {
+        "0": "CT"
+    },
+    "labels": {
+        "0": "background",
+        "1": "pancreas",
+        "2": "cancer"
+    }
+}
