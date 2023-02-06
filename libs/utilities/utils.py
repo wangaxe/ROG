@@ -58,7 +58,12 @@ def save_graph(folder):
 
 
 def save_epoch(state, mean, save_path, out_file, checkpoint, is_best):
-    out_file.write('{},{},{},{},{},{},{}\n'.format(
+    if 'iter' in state.keys():
+        out_file.write('{},{},{},{},{},{},{},{},{}\n'.format(
+        datetime.now(), state['epoch'], state['loss'][0], state['loss'][1],
+        state['dice'], mean, state['lr'], state['iter'], state['threshold']))
+    else:
+        out_file.write('{},{},{},{},{},{},{}\n'.format(
         datetime.now(), state['epoch'], state['loss'][0], state['loss'][1],
         state['dice'], mean, state['lr']))
     out_file.flush()
