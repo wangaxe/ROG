@@ -9,7 +9,6 @@ image,label
 ./imagesTr/pancreas_160.nii.gz,./labelsTr/pancreas_160.nii.gz
 ./imagesTr/pancreas_103.nii.gz,./labelsTr/pancreas_103.nii.gz
 ./imagesTr/pancreas_172.nii.gz,./labelsTr/pancreas_172.nii.gz
-./imagesTr/pancreas_011.nii.gz,./labelsTr/pancreas_011.nii.gz
 ./imagesTr/pancreas_300.nii.gz,./labelsTr/pancreas_300.nii.gz
 ./imagesTr/pancreas_200.nii.gz,./labelsTr/pancreas_200.nii.gz
 ./imagesTr/pancreas_355.nii.gz,./labelsTr/pancreas_355.nii.gz
