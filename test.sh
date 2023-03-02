@@ -16,9 +16,18 @@ task_list='
 9
 '
 for task in $task_list; do
-    python main.py --task $task --gpu 0 --batch 1 --name at_output --test
-    python main.py --task $task --gpu 0 --batch 1 --name at_output --test --adv
+    # python main.py --task $task --gpu 0 --batch 1 --name at_output --test
+    # python main.py --task $task --gpu 0 --batch 1 --name at_output --test --adv
 
-    python main.py --task $task --gpu 0 --batch 1 --name pgd_output --test
-    python main.py --task $task --gpu 0 --batch 1 --name pgd_output --test --adv
+    # python main.py --task $task --gpu 0 --batch 1 --name pgd_output --test
+    # python main.py --task $task --gpu 0 --batch 1 --name pgd_output --test --adv
+
+    # python main.py --task $task --gpu 0 --batch 1 --name FREE_out --test
+    # python main.py --task $task --gpu 0 --batch 1 --name FREE_out --test --adv
+
+    # python main.py --task $task --gpu 0 --batch 1 --name DEAT_out --test
+    # python main.py --task $task --gpu 0 --batch 1 --name DEAT_out --test --adv
+
+    python main.py --task $task --gpu 0 --batch 1 --name PGD_out --test
+    python main.py --task $task --gpu 0 --batch 1 --name PGD_out --test --adv
 done

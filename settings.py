@@ -21,7 +21,7 @@ precalculated_batch = {
 }
 
 
-def plan_experiment(task, batch, patience, fold, rank):
+def plan_experiment(task, batch, patience, fold, rank, out_root='Results'):
     with open(os.path.join('Tasks', task, 'dataset.json'), 'r') as f:
         dataset = json.load(f)
         mean_size = dataset['mean_size']
@@ -77,7 +77,7 @@ def plan_experiment(task, batch, patience, fold, rank):
         'test_batch': int(batch * 1),
         'patience': patience,  # Make it dependent on the data?
         'seed': 12345,
-        'output_folder': os.path.join('Results', task),
+        'output_folder': os.path.join(out_root, task),
         # 'root': os.path.join('/media/SSD0/ladaza/Data/Decathlon_new_preprocessing', task),
         'root': os.path.join('/datasets/MSD_data/processed/', task),
         'train_file': os.path.join('Tasks', task, f'train_fold{fold}.csv'),

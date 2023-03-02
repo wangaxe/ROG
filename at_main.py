@@ -1,4 +1,13 @@
 # -*- coding: utf-8 -*-
+"""
+Developed base on ROG.
+Changes:
+[x] learning rate -> multistep
+[x] optimisor -> SGD
+[x] Add AT trainer
+[x] remove FAB,Square attack 
+
+"""
 import os
 import time
 import argparse
@@ -32,7 +41,6 @@ tasks = {
     '8': 'Task08_HepaticVessel',
     '9': 'Task09_Spleen',
     '10': 'Task10_Colon',
-    '11': 'Task11_KiTS'
 }
 
 
@@ -59,7 +67,8 @@ def main(rank, world_size, args):
         args.resume = True
 
     info, model_params = plan_experiment(
-        tasks[args.task], args.batch, args.patience, args.fold, rank)
+        tasks[args.task], args.batch, args.patience, 
+        args.fold, rank, out_root='MICCAI_Results')
 
     # PATHS AND DIRS
     args.save_path = os.path.join(
@@ -95,11 +104,16 @@ def main(rank, world_size, args):
 
     if training or args.ft:
         # Initialize optimizer
-        optimizer = optim.Adam(
+        # optimizer = optim.Adam(
+        #     ddp_model.parameters(), lr=args.lr,
+        #     weight_decay=1e-5, amsgrad=True)
+        # annealing = optim.lr_scheduler.ReduceLROnPlateau(
+        #     optimizer, verbose=True, patience=info['patience'], factor=0.5)
+        optimizer = optim.SGD(
             ddp_model.parameters(), lr=args.lr,
-            weight_decay=1e-5, amsgrad=True)
-        annealing = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, verbose=True, patience=info['patience'], factor=0.5)
+            weight_decay=args.weight_decay)
+        annealing = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[args.epochs * 2 / 3], gamma=0.1)
+        # annealing = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[args.epochs / 2, args.epochs * 3 / 4], gamma=0.1)
         # Save experiment description
         if rank == 0:
             name_d = 'description_train.txt'
@@ -169,12 +183,12 @@ def main(rank, world_size, args):
     # DATALOADERS
     train_loader = DataLoader(
         train_dataset, sampler=train_sampler, batch_size=info['batch'],
-        num_workers=8, collate_fn=train_collate)
+        num_workers=10, collate_fn=train_collate, pin_memory=True)
     val_loader = DataLoader(
         val_dataset, sampler=None, batch_size=info['test_batch'],
-        num_workers=8, collate_fn=val_collate)
+        num_workers=10, collate_fn=val_collate, pin_memory=True)
     test_loader = DataLoader(
-        test_dataset, sampler=None, shuffle=False, batch_size=1, num_workers=0)
+        test_dataset, sampler=None, shuffle=False, batch_size=info['test_batch'], num_workers=10)
 
     if args.adv:
         adv_loader = dataloader.Medical_data(
@@ -217,7 +231,19 @@ def main(rank, world_size, args):
             [info['batch'], model_params['modalities']] + info['in_size'],
             device=rank)
         info['iter'] = 1
+        if args.adv_trainer == 'free':
+            at_trainer = trainer.train
+            info['iter'] = args.adv_iters
+        elif args.adv_trainer == 'pgd':
+            at_trainer = trainer.pgd_train
+            info['iter'] = args.adv_iters
+        elif args.adv_trainer == 'dfree':
+            at_trainer = trainer.dat_train 
+        elif args.adv_trainer == 'dpgd':
+            pass
+
         info['threshold'] = 0
+
         for epoch in range(epoch + 1, args.epochs + 1):
             lr = utils.get_lr(optimizer)
             if rank == 0:
@@ -226,11 +252,13 @@ def main(rank, world_size, args):
                 print('Current learning rate:', lr)
 
             train_sampler.set_epoch(epoch)
-            train_loss, noise_data, mag = trainer.dat_train(
+            train_loss, noise_data, mag = at_trainer(
                 args, info, ddp_model, train_loader, noise_data, optimizer,
                 criterion, scaler, rank)
+
             # adjust adversarial iteration
-            adjust_adv_iteration(epoch, info, args, mag)
+            if args.adv_trainer in ['dpgd', 'dfree']:
+                adjust_adv_iteration(epoch, info, args, mag)
 
             val_loss, dice = trainer.val(
                 args, ddp_model, val_loader, criterion, metrics, rank)
@@ -238,7 +266,7 @@ def main(rank, world_size, args):
             accumulated_val_loss = moving_average(
                 accumulated_val_loss, val_loss)
             # if epoch % 2 == 0:
-            annealing.step(accumulated_val_loss)
+            annealing.step()
 
             mean = sum(dice) / len(dice)
             is_best = best_dice < mean
@@ -264,9 +292,9 @@ def main(rank, world_size, args):
                     state, mean, args.save_path, out_file,
                     checkpoint=checkpoint, is_best=is_best)
 
-            if lr <= (args.lr / (2 ** 4)):
-                print('Stopping training: learning rate is too small')
-                break
+            # if lr <= (args.lr / (2 ** 4)):
+            #     print('Stopping training: learning rate is too small')
+                # break
         out_file.close()
 
     # Loading the best model for testing
@@ -292,10 +320,11 @@ def main(rank, world_size, args):
             model_name=args.load_model)
         # WORKING: APGD-CE, PGD, square, fab
         # TODO: Check apgd
-        attck = ['apgd-ce', 'pgd', 'fab', 'square']
-        if info['classes'] > 2:
-            # We can do this attack only if the task is not binary
-            attck += ['apgd-dlr', 'pgd', 'fab', 'square']
+        # attck = ['apgd-ce', 'pgd']
+        attck = ['square']
+        # if info['classes'] > 2:
+        #     # We can do this attack only if the task is not binary
+        #     attck += ['apgd-dlr', 'fab', 'square']
         adversary.attacks_to_run = attck
         # _ = adversary.run_standard_evaluation(bs=info['test_batch'])
         _ = adversary.run_standard_evaluation_individual(bs=info['test_batch'])
@@ -337,28 +366,32 @@ if __name__ == '__main__':
                         help='Name of the folder with the pretrained model')
 
     # TRAINING HYPERPARAMETERS
-    parser.add_argument('--lr', type=float, default=1e-3,
-                        help='Initial learning rate (default: 1e-3)')
-    parser.add_argument('--epochs', type=int, default=1000,
-                        help='Maximum number of epochs (default: 1000)')
+    parser.add_argument('--lr', type=float, default=1e-2,
+                        help='Initial learning rate (default: 1e-2)')
+    parser.add_argument('--weight_decay', type=float, default=1e-5,
+                        help='Weight decay (default: 1e-5)')
+    parser.add_argument('--epochs', type=int, default=300,
+                        help='Maximum number of epochs (default: 300)')
     parser.add_argument('--patience', type=int, default=50,
                         help='Patience of the scheduler (default: 50)')
     parser.add_argument('--batch', type=int, default=2,
                         help='Batch size (default: 2)')
-    # parser.add_argument('--warmup', type=int, default=10,
-    #                     help='Iteration of standard training (default: 10)')
+    parser.add_argument('--warmup', type=int, default=10,
+                        help='Iteration of standard training (default: 10)')
 
     # ADVERSARIAL TRAINING AND TESTING
     parser.add_argument('--eps', type=float, default=8.,
                         help='Epsilon for the adv. attack (default: 8/255)')
-    parser.add_argument('--eps_enlarger', type=float, default=1.25,
+    parser.add_argument('--adv_trainer', type=str, default='free',
+                        choices=['free', 'pgd', 'dfree', 'dpgd'])
+    parser.add_argument('--eps_enlarger', type=float, default=1,
                         help= ('Enlarge epsilon for adv. training '+ 
                                 '(default: 1: 8/255 > 8/255)'))
     parser.add_argument('--check_mag', type=int, default=3,
                         help='Adjust adversarial iteration every some epochs')
     parser.add_argument('--gamma', type=float, default=1.1,
                         help='Help to set up new threshold')
-    parser.add_argument('--adv_iters', type=int, default=4,
+    parser.add_argument('--adv_iters', type=int, default=5,
                         help='Number of iterations for AutoAttack')
     parser.add_argument('--adv', action='store_true', default=False,
                         help='Evaluate a model\'s robustness')

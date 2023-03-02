@@ -168,7 +168,6 @@ class SquareAttack():
 
     def attack_single_run(self, x, y):
         with torch.no_grad():
-            adv = x.clone()
             c, d, h, w = x.shape[1:]
             n_features = c * d * h * w
             n_ex_total = x.shape[0]
@@ -182,7 +181,6 @@ class SquareAttack():
                 if i_iter % 100 == 0:
                     print(i_iter)
                 idx_to_fool = (margin_min > self.dice_thresh).nonzero().squeeze()
-
                 x_curr = self.check_shape(x[idx_to_fool])
                 x_best_curr = self.check_shape(x_best[idx_to_fool])
                 y_curr = y[idx_to_fool]

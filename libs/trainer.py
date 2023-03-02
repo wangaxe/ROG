@@ -69,7 +69,7 @@ def train(args, info, model, loader, noise_data, optimizer, criterion, scaler,
             batch_loss.reset()
     if rank == 0:
         print('--- Train: \tLoss: {:.6f} ---'.format(epoch_loss.avg))
-    return epoch_loss.avg, noise_data
+    return epoch_loss.avg, noise_data, None
 
 def dat_train(args, info, model, loader, noise_data, optimizer, criterion, scaler,
           rank):
